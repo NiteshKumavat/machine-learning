@@ -11,7 +11,6 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error
 from sklearn.preprocessing import LabelEncoder
 from sklearn.cluster import KMeans
-import seaborn as sns
 import math
 import pickle as pkl
 
@@ -110,19 +109,26 @@ kmeans.fit(X)
     if type != "Reinforcement Learning" :
         options = list(types[type]["Types"].keys())
         options.insert(0, "None")
+        if type == "Supervised Learning" :
+            st.subheader("Supervised Learning")
+            st.subheader("Types of Supervised Learning")
+            st.markdown("**1. Regression**: Predicts continuous numeric values, like prices, temperatures, or sales amounts.")
+            st.markdown("**2. Classification**: Predicts discrete categories or labels, like spam/not spam, pass/fail, or disease/no disease.")
         algo = st.selectbox("Choose the Algorithm", options=options)
         if algo != "None" :
             info = types[type]["Types"][algo]
             st.info(info["definition"])
             st.image(f"images/{info["img"]}")
             st.code(info["code"], language="python")
+        
 
-def home() :
+def home():
     st.title("Machine Learning Notes")
     st.info("Machine Learning (ML) is a branch of artificial intelligence (AI) that focuses on building systems that can learn from data, identify patterns, and make decisions with minimal human intervention.")
     st.header("Types of ML")
     type = st.selectbox("Choose the ML Type", options=["None", "Supervised Learning", "Unsupervised Learning", "Reinforcement Learning"])
-    if type != "None" :
+
+    if type != "None":
         learning(type)
 
 
@@ -184,44 +190,51 @@ def supervised():
         analysis = st.selectbox("Select the choice", options=["None", "Describe", "Columns", "information"])
         if analysis != "None":
             analyse(analysis, df)
-        
+
         columns = list(df.columns)
-        for column in columns :
-            if df[column].dtype == object :
+        output_col = st.radio("Choose the column to predict", options=columns)
+
+        label_mappings = {}
+
+        for column in columns:
+            if df[column].dtype == object:
                 label = LabelEncoder()
-                label.fit(df[column])
-                df[column] = label.transform(df[column])
-        
+                df[column] = label.fit_transform(df[column])
+                mapping_dict = dict(zip(label.classes_, label.transform(label.classes_)))
+                label_mappings[column] = mapping_dict
+
+        with open("Supervised/label_mappings.pkl", "wb") as f:
+            pkl.dump(label_mappings, f)
+
         df = df.dropna()
-        x = df.drop([columns[-1]], axis=1)
-        y = df[columns[-1]]
+        x = df.drop([output_col], axis=1)
+        y = df[output_col]
 
         xtrain, xtest, ytrain, ytest = train_test_split(x, y, test_size=0.1, random_state=42)
 
         models = {
-            "Linear Regression" : LinearRegression(),
-            "K-nn" : KNeighborsRegressor(),
-            "Decision Tree" : DecisionTreeRegressor(),
-            "Random Forest" : RandomForestRegressor()
+            "Linear Regression": LinearRegression(),
+            "K-nn": KNeighborsRegressor(),
+            "Decision Tree": DecisionTreeRegressor(),
+            "Random Forest": RandomForestRegressor()
         }
 
         error = {}
         lowest = math.inf
         modelName = None
 
-
-        for name, algo in models.items() :
+        for name, algo in models.items():
             model = algo
             model.fit(xtrain, ytrain)
             ypred = model.predict(xtest)
             mse = mean_squared_error(ypred, ytest)
             error[name] = mse
 
-            with open(f"Supervised/{name.split()[0]}.pkl", "wb") as f :
+            with open(f"Supervised/{name.split()[0]}.pkl", "wb") as f:
                 pkl.dump(model, f)
-            
 
             if mse > 0 and lowest > mse:
+                lowest = mse
                 modelName = name
 
         st.header("Error Ploting (Mean Squared Error)")
@@ -232,20 +245,31 @@ def supervised():
         ax.set_title("Model Comparison")
         st.pyplot(fig)
 
-        st.header("Predicting values")
-        for column in columns[0 : -1] :
-            st.number_input(column, key=column)
+        st.header(f"Predicting values by {modelName}")
+        for column in columns:
+            if column == output_col :
+                continue
+            elif column in label_mappings.keys() :
+                st.selectbox(column, options=label_mappings[column].keys(), key=column)
+            else :
+                st.number_input(column, key=column)
 
-        if st.button("Submit values") :
+        if st.button("Submit values"):
             answer = []
-            for column in columns[0 : -1] :
-                answer.append(st.session_state[column])
+            for column in columns:
+                if column == output_col :
+                    continue
+                elif column in label_mappings.keys() :
+                    answer.append(label_mappings[column][st.session_state[column]])
+                else :
+                    answer.append(st.session_state[column])
+
             with open(f"Supervised/{modelName.split()[0]}.pkl", "rb") as f:
                 ML_model = pkl.load(f)
 
             predicted_value = ML_model.predict([answer])
             st.write(modelName)
-            st.success(int(predicted_value))
+            st.success(f"{output_col} : {int(predicted_value)}")
 
 
 def unsupervised():
@@ -262,6 +286,17 @@ def unsupervised():
 
         df = df.dropna()
 
+        label_mappings = {}
+        for column in df.columns:
+            if df[column].dtype == object:
+                label = LabelEncoder()
+                df[column] = label.fit_transform(df[column])
+                mapping_dict = dict(zip(label.classes_, label.transform(label.classes_)))
+                label_mappings[column] = mapping_dict
+
+        with open("Unsupervised/label_mappings.pkl", "wb") as f:
+            pkl.dump(label_mappings, f)
+
         st.header("K-Means Clustering")
         if st.checkbox("Apply K-Means"):
             numeric_df = df.select_dtypes(include=['float64', 'int64'])
@@ -269,8 +304,7 @@ def unsupervised():
             if numeric_df.shape[1] < 2:
                 st.warning("Need at least 2 numerical columns for clustering.")
                 return
-            
-            
+
             st.subheader("Elbow Method - Find Optimal Number of Clusters")
             wcss = []
             K_range = range(1, 11)
@@ -287,24 +321,36 @@ def unsupervised():
             ax_elbow.grid(True)
             st.pyplot(fig_elbow)
 
+            val_true = st.text_input("Enter the text which will display if the output is 1 : ")
+            val_false = st.text_input("Enter the text which will display if the output is 0 : ")
             model = KMeans(n_clusters=2, random_state=42)
-            model.fit(df)
+            model.fit(numeric_df)
 
             with open("Unsupervised/KMeans.pkl", "wb") as f:
                 pkl.dump(model, f)
 
-            columns = list(df.select_dtypes(include=['float64', 'int64']).columns)
+            columns = list(numeric_df.columns)
             for column in columns:
-                st.number_input(f"Enter value for {column}", key=column)
+                if column in label_mappings.keys() :
+                    st.selectbox(column, options=label_mappings[column].keys(), key=column)
+                else :
+                    st.number_input(f"Enter value for {column}", key=column)
 
             if st.button("Predict"):
-                user_input = [st.session_state[column] for column in columns]
+                user_input = []
+                for column in columns :
+                    if column in label_mappings.keys() :
+                        user_input.append(label_mappings[column][st.session_state[column]])
+                    else :
+                        user_input.append(st.session_state[column])
 
                 with open("Unsupervised/KMeans.pkl", "rb") as f:
                     k_model = pkl.load(f)
 
-                output = "working" if k_model.predict([user_input]) == 1 else "Not Working"
-                st.write(f"{output}")
+                prediction = k_model.predict([user_input])
+                st.write(prediction)
+                st.write(f"{val_true if prediction == 1 else val_false}")
+
 
 if active == "Home" :
     home()
