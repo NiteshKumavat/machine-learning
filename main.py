@@ -51,7 +51,7 @@ model.fit(x,y)
                 }, 
                 "K-nn(K nearest neighbour)" : {
                     "definition" : "A non-parametric, instance-based learning algorithm that classifies a data point based on how its ‘K’ nearest neighbors are classified.",
-                    "img" : "k-nn.webp",
+                    "img" : "K-nn.webp",
                     "code" : '''
 from sklearn.neighbours import KNeighborsClassifier
 model = KNeighborsClassifier()
@@ -363,3 +363,4 @@ elif active == "Supervised Learning" :
 
 elif active == "Unsupervised Learning" :
     unsupervised()
+
